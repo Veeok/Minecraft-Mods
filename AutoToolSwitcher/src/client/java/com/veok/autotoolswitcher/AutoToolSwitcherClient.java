@@ -43,12 +43,19 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     private static final float SWITCH_THRESHOLD = 0.001F;
     private static final int MANUAL_OVERRIDE_COOLDOWN_TICKS = 10;
 
-    private static boolean enabled = true;
-    private static boolean switchForBlocksOnLook = false;
-    private static boolean switchForBlocksWhileMining = true;
-    private static boolean switchForHostileMobs = true;
-    private static boolean restorePreviousSlot = true;
-    private static boolean pauseWhileDropKeyDown = true;
+    static final boolean DEFAULT_ENABLED = true;
+    static final boolean DEFAULT_SWITCH_FOR_BLOCKS_ON_LOOK = false;
+    static final boolean DEFAULT_SWITCH_FOR_BLOCKS_WHILE_MINING = true;
+    static final boolean DEFAULT_SWITCH_FOR_HOSTILE_MOBS = true;
+    static final boolean DEFAULT_RESTORE_PREVIOUS_SLOT = true;
+    static final boolean DEFAULT_PAUSE_WHILE_DROP_KEY_DOWN = true;
+
+    static boolean enabled = DEFAULT_ENABLED;
+    static boolean switchForBlocksOnLook = DEFAULT_SWITCH_FOR_BLOCKS_ON_LOOK;
+    static boolean switchForBlocksWhileMining = DEFAULT_SWITCH_FOR_BLOCKS_WHILE_MINING;
+    static boolean switchForHostileMobs = DEFAULT_SWITCH_FOR_HOSTILE_MOBS;
+    static boolean restorePreviousSlot = DEFAULT_RESTORE_PREVIOUS_SLOT;
+    static boolean pauseWhileDropKeyDown = DEFAULT_PAUSE_WHILE_DROP_KEY_DOWN;
 
     private static int autoSelectedSlot = -1;
     private static int restoreSlot = -1;
@@ -87,7 +94,6 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
                 .then(booleanCommand("look", () -> switchForBlocksOnLook, value -> switchForBlocksOnLook = value, "Block look switching"))
                 .then(booleanCommand("mine", () -> switchForBlocksWhileMining, value -> switchForBlocksWhileMining = value, "Block mining switching"))
                 .then(booleanCommand("attack", () -> switchForHostileMobs, value -> switchForHostileMobs = value, "Hostile mob sword switching"))
-                .then(booleanCommand("combat", () -> switchForHostileMobs, value -> switchForHostileMobs = value, "Hostile mob sword switching"))
                 .then(booleanCommand("restore", () -> restorePreviousSlot, value -> restorePreviousSlot = value, "Restore previous slot"))
                 .then(booleanCommand("drop-safe", () -> pauseWhileDropKeyDown, value -> pauseWhileDropKeyDown = value, "Drop safety"))
                 .then(ClientCommands.literal("reset")
@@ -126,25 +132,33 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
 
     private static int setBooleanSetting(String displayName, boolean value, BooleanSettingSetter setter) {
         setter.set(value);
-        saveConfig();
-        if (!hasAnyTriggerEnabled()) {
-            finishAutoSwitch(Minecraft.getInstance());
-        }
+        applyAndSaveConfig();
         sendSettingStatus(displayName, value);
         return 1;
     }
 
     private static int resetDefaults() {
-        enabled = true;
-        switchForBlocksOnLook = false;
-        switchForBlocksWhileMining = true;
-        switchForHostileMobs = true;
-        restorePreviousSlot = true;
-        pauseWhileDropKeyDown = true;
+        resetSettingsToDefaults();
         finishAutoSwitch(Minecraft.getInstance());
         saveConfig();
         sendStatus();
         return 1;
+    }
+
+    static void applyAndSaveConfig() {
+        if (!enabled || !hasAnyTriggerEnabled()) {
+            finishAutoSwitch(Minecraft.getInstance());
+        }
+        saveConfig();
+    }
+
+    static void resetSettingsToDefaults() {
+        enabled = DEFAULT_ENABLED;
+        switchForBlocksOnLook = DEFAULT_SWITCH_FOR_BLOCKS_ON_LOOK;
+        switchForBlocksWhileMining = DEFAULT_SWITCH_FOR_BLOCKS_WHILE_MINING;
+        switchForHostileMobs = DEFAULT_SWITCH_FOR_HOSTILE_MOBS;
+        restorePreviousSlot = DEFAULT_RESTORE_PREVIOUS_SLOT;
+        pauseWhileDropKeyDown = DEFAULT_PAUSE_WHILE_DROP_KEY_DOWN;
     }
 
     private static boolean hasAnyTriggerEnabled() {
@@ -157,13 +171,14 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
             return;
         }
 
-        client.player.sendSystemMessage(Component.literal("Auto Tool Switcher").withStyle(ChatFormatting.GOLD));
+        client.player.sendSystemMessage(Component.literal("Auto Tool Switcher").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         sendStatusLine(client, "Global", enabled);
-        sendStatusLine(client, "Block look switching", switchForBlocksOnLook);
-        sendStatusLine(client, "Block mining switching", switchForBlocksWhileMining);
-        sendStatusLine(client, "Hostile mob sword switching", switchForHostileMobs);
-        sendStatusLine(client, "Restore previous slot", restorePreviousSlot);
-        sendStatusLine(client, "Drop safety", pauseWhileDropKeyDown);
+        sendStatusLine(client, "Look at block = tool", switchForBlocksOnLook);
+        sendStatusLine(client, "Mine block = tool", switchForBlocksWhileMining);
+        sendStatusLine(client, "Hostile mob = sword", switchForHostileMobs);
+        sendStatusLine(client, "Switch back after target", restorePreviousSlot);
+        sendStatusLine(client, "Pause while dropping items", pauseWhileDropKeyDown);
+        client.player.sendSystemMessage(Component.literal("Use Mod Menu > Auto Tool Switcher for clickable settings.").withStyle(ChatFormatting.GRAY));
 
         if (enabled && !hasAnyTriggerEnabled()) {
             client.player.sendSystemMessage(Component.literal("No trigger modes are enabled. Turn on look, mine, or attack.").withStyle(ChatFormatting.YELLOW));
@@ -176,14 +191,25 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
             return;
         }
 
-        client.player.sendSystemMessage(Component.literal("Auto Tool Switcher commands").withStyle(ChatFormatting.GOLD));
-        client.player.sendSystemMessage(Component.literal("/autotoolswitcher on|off|toggle"));
-        client.player.sendSystemMessage(Component.literal("/autotoolswitcher look on|off|toggle"));
-        client.player.sendSystemMessage(Component.literal("/autotoolswitcher mine on|off|toggle"));
-        client.player.sendSystemMessage(Component.literal("/autotoolswitcher attack on|off|toggle"));
-        client.player.sendSystemMessage(Component.literal("/autotoolswitcher restore on|off|toggle"));
-        client.player.sendSystemMessage(Component.literal("/autotoolswitcher drop-safe on|off|toggle"));
-        client.player.sendSystemMessage(Component.literal("/autotoolswitcher status|reset|help"));
+        client.player.sendSystemMessage(Component.literal("Auto Tool Switcher Help").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+        client.player.sendSystemMessage(Component.literal("Best way: open Mod Menu > Auto Tool Switcher for clickable settings.").withStyle(ChatFormatting.GRAY));
+        client.player.sendSystemMessage(Component.literal("Quick commands use: /autotoolswitcher <setting> on|off|toggle").withStyle(ChatFormatting.GRAY));
+        sendHelpLine(client, "on/off/toggle", "master switch for the whole mod");
+        sendHelpLine(client, "look", "switch tools just by looking at blocks; useful, but can get in the way");
+        sendHelpLine(client, "mine", "switch tools only while breaking a block");
+        sendHelpLine(client, "attack", "swap to your best sword when aiming at a hostile mob");
+        sendHelpLine(client, "restore", "return to your previous slot after the block or mob is gone");
+        sendHelpLine(client, "drop-safe", "pause switching while your drop key is held");
+        sendHelpLine(client, "status", "show your current settings");
+        sendHelpLine(client, "reset", "go back to the default setup");
+        client.player.sendSystemMessage(Component.literal("Example: /autotoolswitcher look off").withStyle(ChatFormatting.YELLOW));
+    }
+
+    private static void sendHelpLine(Minecraft client, String setting, String description) {
+        client.player.sendSystemMessage(
+            Component.literal("/autotoolswitcher " + setting).withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" - " + description).withStyle(ChatFormatting.GRAY))
+        );
     }
 
     private static void sendStatusLine(Minecraft client, String displayName, boolean value) {
@@ -437,12 +463,7 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     }
 
     private static void loadDefaults() {
-        enabled = true;
-        switchForBlocksOnLook = false;
-        switchForBlocksWhileMining = true;
-        switchForHostileMobs = true;
-        restorePreviousSlot = true;
-        pauseWhileDropKeyDown = true;
+        resetSettingsToDefaults();
     }
 
     private static boolean getBoolean(Properties properties, String key, boolean defaultValue) {
@@ -450,7 +471,7 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
         return value == null ? defaultValue : Boolean.parseBoolean(value);
     }
 
-    private static void saveConfig() {
+    static void saveConfig() {
         Properties properties = new Properties();
         properties.setProperty("enabled", Boolean.toString(enabled));
         properties.setProperty("switchForBlocksOnLook", Boolean.toString(switchForBlocksOnLook));

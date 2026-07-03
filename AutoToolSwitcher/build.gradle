@@ -34,6 +34,8 @@ dependencies {
     compileOnly files(requiredPath('minecraft_jar'))
     compileOnly files(requiredPath('fabric_loader_jar'))
     compileOnly files(requiredPath('fabric_api_jar'))
+    compileOnly files(requiredPath('modmenu_jar'))
+    compileOnly files(requiredPath('cloth_config_jar'))
     compileOnly fileTree(dir: requiredPath('fabric_api_modules_dir'), include: '*.jar')
     compileOnly fileTree(
         dir: requiredPath('minecraft_libraries_dir'),
