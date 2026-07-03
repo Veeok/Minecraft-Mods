@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "autotoolswitcher",
+  "version": "${version}",
+  "name": "Auto Tool Switcher",
+  "description": "Client-side hotbar tool selection helper for Fabric. Supports block mining tools, hostile-mob sword switching, and optional slot restore.",
+  "authors": [
+    "Veok"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/autotoolswitcher/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.veok.autotoolswitcher.AutoToolSwitcherClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "26.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

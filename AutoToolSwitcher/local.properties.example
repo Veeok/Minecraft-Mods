@@ -1,0 +1,5 @@
+minecraft_jar=C:/path/to/minecraft/Install/versions/26.2/26.2.jar
+fabric_loader_jar=C:/path/to/minecraft/Install/libraries/net/fabricmc/fabric-loader/0.19.3/fabric-loader-0.19.3.jar
+fabric_api_jar=C:/path/to/minecraft/Instances/Your Fabric Instance/mods/fabric-api-0.153.0+26.2.jar
+fabric_api_modules_dir=C:/path/to/extracted/fabric-api-modules
+minecraft_libraries_dir=C:/path/to/minecraft/Install/libraries

@@ -1,0 +1,10 @@
+.gradle/
+build/
+out/
+*.class
+*.log
+*.tmp
+
+AutoToolSwitcher/local.properties
+AutoToolSwitcher/.gradle/
+AutoToolSwitcher/build/

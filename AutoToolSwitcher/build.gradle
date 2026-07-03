@@ -1,0 +1,62 @@
+plugins {
+    id 'java'
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+
+def requiredPath = { name ->
+    def value = findProperty(name) ?: localProperties.getProperty(name)
+    if (!value) {
+        throw new GradleException("Missing '$name'. Copy local.properties.example to local.properties and fill in your local jar paths.")
+    }
+    return value
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+sourceSets {
+    main {
+        java.srcDirs = ['src/client/java']
+        resources.srcDirs = ['src/main/resources']
+    }
+}
+
+dependencies {
+    compileOnly files(requiredPath('minecraft_jar'))
+    compileOnly files(requiredPath('fabric_loader_jar'))
+    compileOnly files(requiredPath('fabric_api_jar'))
+    compileOnly fileTree(dir: requiredPath('fabric_api_modules_dir'), include: '*.jar')
+    compileOnly fileTree(
+        dir: requiredPath('minecraft_libraries_dir'),
+        includes: ['**/*.jar'],
+        excludes: ['net/minecraftforge/**', 'net/neoforged/**']
+    )
+}
+
+processResources {
+    inputs.property 'version', project.version
+
+    filesMatching('fabric.mod.json') {
+        expand 'version': inputs.properties.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.toVersion(25)
+    targetCompatibility = JavaVersion.toVersion(25)
+}
