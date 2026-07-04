@@ -3,7 +3,7 @@
   "id": "autotoolswitcher",
   "version": "${version}",
   "name": "Auto Tool Switcher",
-  "description": "Client-side hotbar tool selection helper for Fabric. Includes Mod Menu settings, block mining tools, hostile-mob sword switching, and slot restore.",
+  "description": "Client-side hotbar tool selection helper for Fabric. Includes Mod Menu settings, slot filters, durability safety, combat helpers, profiles, and slot restore.",
   "authors": [
     "Veok"
   ],
