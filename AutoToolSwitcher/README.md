@@ -16,10 +16,16 @@ It keeps your hotbar from being annoying:
 ## Required Mods
 
 - Fabric API
-- Mod Menu
-- Cloth Config
+- Mod Menu `18.0.0-beta.1` or newer
+- Cloth Config `26.1.154` or newer
 
 If Mod Menu or Cloth Config is missing, Fabric will stop loading and tell you what dependency is missing.
+
+## Loader Support
+
+- Fabric: supported for Minecraft `26.1`, `26.1.1`, `26.1.2`, and `26.2`.
+- Quilt: expected to work only through Quilt's Fabric-compatible loading path. No separate Quilt artifact is published yet.
+- Forge/NeoForge: not supported by this jar. They need separate ports because the current mod uses Fabric APIs.
 
 ## Config UI
 
@@ -64,6 +70,6 @@ Example: `/autotoolswitcher look off`
 
 ## Build Notes
 
-This version targets Minecraft `26.2`, Fabric Loader `0.19.3`, Fabric API `0.154.0+26.2`, Mod Menu `20.0.0-beta.4`, Cloth Config `26.2.155`, and Java `25`.
+This version targets Minecraft `26.1` through `26.2`, Fabric Loader `0.19.3`, Fabric API `0.154.0+26.1.2` or newer, Mod Menu `18.0.0-beta.1` or newer, Cloth Config `26.1.154` or newer, and Java `25`.
 
-Because this build uses local Minecraft/Fabric jars directly, copy `local.properties.example` to `local.properties` and fill in your local paths before running Gradle.
+Because this build uses local Minecraft/Fabric jars directly, copy `local.properties.example` to `local.properties` and fill in your local paths before running Gradle. Build against the oldest version you want to support.

@@ -1,5 +1,31 @@
 # Changelog
 
+## Auto Tool Switcher 1.4.1
+
+Compatibility update.
+
+### Added
+
+- Fabric metadata now supports Minecraft `26.1` through `26.2`.
+- Documented loader support expectations for Fabric, Quilt, Forge, and NeoForge.
+
+### Changed
+
+- Lowered Mod Menu dependency floor to `18.0.0-beta.1` for 26.1-era packs.
+- Lowered Cloth Config dependency floor to `26.1.154` for 26.1-era packs.
+- Updated build notes to compile against the oldest supported Minecraft version.
+
+### Verified
+
+- Compiles against Minecraft `26.1`.
+- Compiles against Minecraft `26.1.2`.
+- Previously verified on Minecraft `26.2`.
+
+### Notes
+
+- No local `26.1.1` jar was installed, so `26.1.1` is covered by the `>=26.1 <=26.2` Fabric metadata range but was not locally compiled.
+- Forge and NeoForge are not compatible with the Fabric jar. They require separate ports/artifacts.
+
 ## Auto Tool Switcher 1.4.0
 
 Big settings update. Core quality-of-life features are on by default, extra features are available but off by default.
