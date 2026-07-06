@@ -6,6 +6,8 @@ Author: Veok
 
 License: MIT
 
+Current stage: Beta. Windows restart has been tested on a live dedicated server. Linux and macOS restart paths are implemented but still need live server testing before this should be marked Stable/Release.
+
 ## Commands
 
 - `/restart`
@@ -27,7 +29,7 @@ The relauncher waits for the old Java process to exit, then starts the server us
 
 If the 4G fallback is used, the next startup shows a yellow warning to online operators and logs it after startup, so the owner knows to configure their real RAM value.
 
-On Windows, the relaunched server window stays open if the launch command fails, so the error remains visible. The relauncher also writes handoff details to `restart-server-restart.log` in the server folder.
+On Windows, the relaunched server window stays open if the launch command fails, so the error remains visible. The relauncher also writes handoff details to `restart-server-restart.log` in the server folder, including the selected launch source.
 
 ## Config
 
@@ -63,6 +65,8 @@ Older Minecraft versions are not declared as supported because the server comman
 ```bash
 gradle build
 ```
+
+This repository does not currently include a Gradle wrapper. Use a local Gradle install until a wrapper is generated for a future release.
 
 The built jar will be in:
 

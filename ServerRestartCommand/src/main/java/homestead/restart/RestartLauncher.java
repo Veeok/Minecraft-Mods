@@ -15,13 +15,14 @@ import java.util.Properties;
 
 public final class RestartLauncher {
     private static final String DEFAULT_LAUNCH_COMMAND = "java -Xmx4G -jar fabric-server-launch.jar nogui";
+    private static final String RESTART_LOG = "restart-server-restart.log";
 
     private RestartLauncher() {
     }
 
     public static void main(String[] args) throws Exception {
         Path serverDir = args.length >= 2 ? Path.of(args[1]).toAbsolutePath().normalize() : Path.of(".").toAbsolutePath().normalize();
-        Path logPath = serverDir.resolve("restart-server-restart.log");
+        Path logPath = serverDir.resolve(RESTART_LOG);
 
         try {
             run(args, serverDir, logPath);
@@ -46,11 +47,16 @@ public final class RestartLauncher {
         Path configPath = Path.of(args[2]).toAbsolutePath().normalize();
         Path defaultRamFlag = Path.of(args[3]).toAbsolutePath().normalize();
 
+        if (!Files.isDirectory(serverDir)) {
+            throw new IOException("Server directory does not exist: " + serverDir);
+        }
+
         log(logPath, "Waiting for old server process " + oldPid + " to exit.");
         waitForOldServer(oldPid);
         Thread.sleep(2000L);
 
         LaunchPlan launchPlan = resolveLaunchPlan(serverDir, configPath, defaultRamFlag);
+        log(logPath, "Launch source: " + launchPlan.source());
         log(logPath, "Launching restart command: " + launchPlan.command());
         launchDetached(serverDir, launchPlan.command(), logPath);
         log(logPath, "Restart command was handed off.");
@@ -74,13 +80,18 @@ public final class RestartLauncher {
         if (preferStartScript) {
             Path startScript = findStartScript(serverDir);
             if (startScript != null) {
-                return new LaunchPlan(commandForStartScript(startScript), false);
+                return new LaunchPlan(commandForStartScript(startScript), "start script: " + startScript.getFileName(), false);
             }
         }
 
         String configuredLaunchCommand = properties.getProperty("launchCommand", "").trim();
         if (!configuredLaunchCommand.isBlank()) {
-            return new LaunchPlan(configuredLaunchCommand, false);
+            return new LaunchPlan(configuredLaunchCommand, "configured launchCommand", false);
+        }
+
+        Path fallbackJar = serverDir.resolve("fabric-server-launch.jar");
+        if (!Files.isRegularFile(fallbackJar)) {
+            throw new IOException("No start.bat/start.sh or launchCommand is configured, and fabric-server-launch.jar was not found for the fallback command.");
         }
 
         Files.createDirectories(defaultRamFlag.getParent());
@@ -88,7 +99,7 @@ public final class RestartLauncher {
             defaultRamFlag,
             "Default 4G fallback launch used. Set launchCommand in server-restart-command.properties."
         );
-        return new LaunchPlan(DEFAULT_LAUNCH_COMMAND, true);
+        return new LaunchPlan(DEFAULT_LAUNCH_COMMAND, "default 4G fallback", true);
     }
 
     private static Properties loadConfig(Path configPath) throws IOException {
@@ -137,7 +148,7 @@ public final class RestartLauncher {
         } else {
             String shellCommand = "cd " + quoteShell(serverDir.toString())
                 + " && nohup sh -c " + quoteShell(command)
-                + " >> restart-server-restart.log 2>&1 < /dev/null &";
+                + " >> " + quoteShell(RESTART_LOG) + " 2>&1 < /dev/null &";
             builder = new ProcessBuilder("sh", "-c", shellCommand);
         }
 
@@ -149,7 +160,10 @@ public final class RestartLauncher {
 
     private static void log(Path logPath, String message) {
         try {
-            Files.createDirectories(logPath.getParent());
+            Path parent = logPath.getParent();
+            if (parent != null && !Files.isDirectory(parent)) {
+                return;
+            }
             Files.writeString(
                 logPath,
                 "[" + Instant.now() + "] " + message + System.lineSeparator(),
@@ -187,6 +201,6 @@ public final class RestartLauncher {
         return Boolean.parseBoolean(value.trim());
     }
 
-    private record LaunchPlan(String command, boolean defaultRamFallback) {
+    private record LaunchPlan(String command, String source, boolean defaultRamFallback) {
     }
 }

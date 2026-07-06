@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.2
+
+- Reduced duplicate restart messages in the server log by using one broadcast path.
+- Improved restart failure messages before shutdown, including a clear note that the server is still running.
+- Added relauncher validation for missing server folders and missing fallback launch jar.
+- Added launch source details to `restart-server-restart.log`.
+- Documented the current stage as Beta and the remaining Stable/Release requirement.
+
 ## 1.1.1
 
 - Fixed Windows restart handoff by simplifying the `cmd.exe start` command.

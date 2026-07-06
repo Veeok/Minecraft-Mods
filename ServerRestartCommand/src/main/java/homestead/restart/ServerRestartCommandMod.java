@@ -16,6 +16,8 @@ import net.minecraft.server.permissions.PermissionLevel;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
@@ -87,7 +89,11 @@ public final class ServerRestartCommandMod implements ModInitializer {
             });
         } catch (Exception exception) {
             RESTART_SCHEDULED.set(false);
-            server.execute(() -> broadcast(server, "Restart failed: " + exception.getMessage()));
+            server.execute(() -> {
+                broadcast(server, "Restart failed before shutdown. The server is still running. Check restart-server-restart.log and the console for details: " + exception.getMessage());
+                server.sendSystemMessage(Component.literal("[Server Restart Command] Restart launcher error:"));
+                server.sendSystemMessage(Component.literal(stackTrace(exception)));
+            });
         }
     }
 
@@ -139,7 +145,12 @@ public final class ServerRestartCommandMod implements ModInitializer {
 
     private static void broadcast(MinecraftServer server, String message) {
         server.getPlayerList().broadcastSystemMessage(Component.literal("[Server] " + message), false);
-        server.sendSystemMessage(Component.literal("[Server] " + message));
+    }
+
+    private static String stackTrace(Exception exception) {
+        StringWriter stackTrace = new StringWriter();
+        exception.printStackTrace(new PrintWriter(stackTrace));
+        return stackTrace.toString();
     }
 
     private static void warnIfDefaultRamFallbackWasUsed(MinecraftServer server) {
