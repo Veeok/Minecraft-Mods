@@ -2,8 +2,13 @@ package homestead.restart;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Properties;
@@ -15,20 +20,40 @@ public final class RestartLauncher {
     }
 
     public static void main(String[] args) throws Exception {
+        Path serverDir = args.length >= 2 ? Path.of(args[1]).toAbsolutePath().normalize() : Path.of(".").toAbsolutePath().normalize();
+        Path logPath = serverDir.resolve("restart-server-restart.log");
+
+        try {
+            run(args, serverDir, logPath);
+        } catch (Throwable throwable) {
+            log(logPath, "Restart launcher failed.", throwable);
+            if (throwable instanceof Exception exception) {
+                throw exception;
+            }
+            if (throwable instanceof Error error) {
+                throw error;
+            }
+            throw new RuntimeException(throwable);
+        }
+    }
+
+    private static void run(String[] args, Path serverDir, Path logPath) throws Exception {
         if (args.length < 4) {
             throw new IllegalArgumentException("Expected args: <oldPid> <serverDir> <configPath> <defaultRamFlag>");
         }
 
         long oldPid = Long.parseLong(args[0]);
-        Path serverDir = Path.of(args[1]).toAbsolutePath().normalize();
         Path configPath = Path.of(args[2]).toAbsolutePath().normalize();
         Path defaultRamFlag = Path.of(args[3]).toAbsolutePath().normalize();
 
+        log(logPath, "Waiting for old server process " + oldPid + " to exit.");
         waitForOldServer(oldPid);
         Thread.sleep(2000L);
 
         LaunchPlan launchPlan = resolveLaunchPlan(serverDir, configPath, defaultRamFlag);
-        launchDetached(serverDir, launchPlan.command());
+        log(logPath, "Launching restart command: " + launchPlan.command());
+        launchDetached(serverDir, launchPlan.command(), logPath);
+        log(logPath, "Restart command was handed off.");
     }
 
     static boolean isWindows() {
@@ -87,7 +112,7 @@ public final class RestartLauncher {
     private static String commandForStartScript(Path script) {
         String fileName = script.getFileName().toString().toLowerCase(Locale.ROOT);
         if (isWindows() && fileName.endsWith(".bat")) {
-            return "call " + quoteWindows(script.toString());
+            return "call " + quoteWindows(script.getFileName().toString());
         }
         if (!isWindows() && fileName.endsWith(".sh")) {
             return "sh " + quoteShell(script.toString());
@@ -95,11 +120,20 @@ public final class RestartLauncher {
         return quoteForCurrentShell(script.toString());
     }
 
-    private static void launchDetached(Path serverDir, String command) throws IOException {
+    private static void launchDetached(Path serverDir, String command, Path logPath) throws IOException {
         ProcessBuilder builder;
         if (isWindows()) {
-            String startCommand = "start \"\" /D " + quoteWindows(serverDir.toString()) + " cmd.exe /c " + quoteWindows(command);
-            builder = new ProcessBuilder("cmd.exe", "/c", startCommand);
+            builder = new ProcessBuilder(
+                "cmd.exe",
+                "/c",
+                "start",
+                "Server Restart Command",
+                "/D",
+                serverDir.toString(),
+                "cmd.exe",
+                "/k",
+                command
+            );
         } else {
             String shellCommand = "cd " + quoteShell(serverDir.toString())
                 + " && nohup sh -c " + quoteShell(command)
@@ -108,7 +142,29 @@ public final class RestartLauncher {
         }
 
         builder.directory(serverDir.toFile());
+        builder.redirectErrorStream(true);
+        builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logPath.toFile()));
         builder.start();
+    }
+
+    private static void log(Path logPath, String message) {
+        try {
+            Files.createDirectories(logPath.getParent());
+            Files.writeString(
+                logPath,
+                "[" + Instant.now() + "] " + message + System.lineSeparator(),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND
+            );
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static void log(Path logPath, String message, Throwable throwable) {
+        StringWriter stackTrace = new StringWriter();
+        throwable.printStackTrace(new PrintWriter(stackTrace));
+        log(logPath, message + System.lineSeparator() + stackTrace);
     }
 
     private static String quoteForCurrentShell(String value) {

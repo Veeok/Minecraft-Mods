@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- Fixed Windows restart handoff by simplifying the `cmd.exe start` command.
+- Changed Windows restarts to keep the relaunched command window open, so launch errors are visible.
+- Added `restart-server-restart.log` entries from the Java relauncher for easier debugging.
+
 ## 1.1.0
 
 - Added cross-platform Java relauncher for Windows, macOS, and Linux.
