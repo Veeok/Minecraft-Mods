@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "server_restart_command",
+  "version": "${version}",
+  "name": "Server Restart Command",
+  "description": "Adds a server-side command that relaunches and stops dedicated servers safely.",
+  "authors": [
+    "Veok"
+  ],
+  "license": "MIT",
+  "icon": "assets/server_restart_command/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "homestead.restart.ServerRestartCommandMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "fabric-api": "*",
+    "minecraft": ">=26.1 <26.3"
+  }
+}
