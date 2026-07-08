@@ -1,5 +1,14 @@
 # Changelog
 
+## Auto Tool Switcher 1.4.2
+
+Visual update.
+
+### Changed
+
+- Replaced the mod icon with a more Minecraft-style pixel-art icon.
+- Exported a larger CurseForge-ready project icon.
+
 ## Auto Tool Switcher 1.4.1
 
 Compatibility update.
