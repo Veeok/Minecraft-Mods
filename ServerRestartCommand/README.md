@@ -25,15 +25,13 @@ The commands work from in-game for permitted operators and from the server conso
 
 Minecraft cannot restart itself after the JVM exits unless something outside the old server process starts it again. This mod handles that by starting a tiny Java relauncher process before shutting the server down.
 
-The relauncher waits for the old Java process to exit, then starts the server using this priority order:
+The relauncher waits for the old Java process to exit, then starts the configured server jar directly with Java.
 
-1. `start.bat` on Windows, or `start.sh` on macOS/Linux, if present.
-2. `launchCommand` from `config/server-restart-command.properties`.
-3. Safe fallback: `java -Xmx4G -jar fabric-server-launch.jar nogui`.
+No Windows batch files, Unix shell scripts, or free-form command strings are executed by the mod.
 
-If the 4G fallback is used, the next startup shows a yellow warning to online operators and logs it after startup, so the owner knows to configure their real RAM value.
+By default, the relauncher reuses the current server JVM arguments so your RAM setting is kept. If you set `reuseCurrentJvmArgs=false`, it uses `jvmArgs` from the config instead.
 
-On Windows, the relaunched server window stays open if the launch command fails, so the error remains visible. The relauncher also writes handoff details to `restart-server-restart.log` in the server folder, including the selected launch source.
+Relaunch details and relaunched server output are written to `restart-server-restart.log` in the server folder.
 
 ## Config
 
@@ -46,11 +44,13 @@ config/server-restart-command.properties
 Example:
 
 ```properties
-launchCommand=java -Xmx12G -jar fabric-server-launch.jar nogui
-preferStartScript=true
+javaExecutable=
+serverJar=fabric-server-launch.jar
+reuseCurrentJvmArgs=true
+jvmArgs=-Xmx4G
+serverArgs=nogui
 defaultDelaySeconds=5
 permissionLevel=4
-defaultRamWarningDelaySeconds=60
 warningIndicator=both
 warningColor=yellow
 restartWarningMessage=[SERVER] Restart in {seconds} {second_word}.
@@ -61,7 +61,11 @@ shutdownNowMessage=[SERVER] Shutting down now.
 shutdownScheduledMessage=Shutdown scheduled in {seconds} {second_word}.
 ```
 
-If `preferStartScript=true`, the mod uses `start.bat`/`start.sh` first. Set it to `false` to always use `launchCommand`.
+`javaExecutable` can be left blank to use the same Java executable that started the current server.
+
+`serverJar` is the jar file to start from the server folder. For Fabric servers, this is usually `fabric-server-launch.jar`.
+
+`reuseCurrentJvmArgs=true` keeps the current JVM flags, including RAM settings. Set it to `false` to use `jvmArgs` instead.
 
 `warningIndicator` controls where player warnings appear:
 

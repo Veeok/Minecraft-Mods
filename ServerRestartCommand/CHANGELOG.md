@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1
+
+- Removed start-script and free-form launch command execution for CurseForge moderation compliance.
+- Replaced `launchCommand`, `start.bat`, and `start.sh` relaunching with structured direct Java launching.
+- Added structured launch config keys: `javaExecutable`, `serverJar`, `reuseCurrentJvmArgs`, `jvmArgs`, and `serverArgs`.
+- Restart now reuses the current server JVM arguments by default, keeping RAM settings without shell commands.
+- Relaunched server output is appended to `restart-server-restart.log`.
+
 ## 1.2.0
 
 - Added `/shutdown` and `/shutdown <delay_seconds>` to stop the server without relaunching.

@@ -2,18 +2,17 @@
 
 ## Current Stage
 
-1.2.0 is Beta.
+1.2.1 is Beta.
 
-Windows `start.bat` restart has been tested on a live dedicated server. Linux and macOS relaunch paths are implemented but still need live validation before marking the mod Stable/Release.
+Windows direct Java restart has been tested on a live dedicated server. Linux and macOS relaunch paths are implemented but still need live validation before marking the mod Stable/Release.
 
 ## Stable/Release Gates
 
-- Windows `start.bat` restart succeeds repeatedly.
-- Windows `launchCommand` restart succeeds when `preferStartScript=false`.
-- Windows fallback restart succeeds when no script or launch command is available.
-- Linux `start.sh` restart succeeds on a dedicated server.
-- Linux `launchCommand` restart succeeds on a dedicated server.
-- macOS `start.sh` restart succeeds, if macOS support is advertised.
+- Windows direct Java restart succeeds repeatedly.
+- Windows restart succeeds with `reuseCurrentJvmArgs=true`.
+- Windows restart succeeds with `reuseCurrentJvmArgs=false` and configured `jvmArgs`.
+- Linux direct Java restart succeeds on a dedicated server.
+- macOS direct Java restart succeeds, if macOS support is advertised.
 - `/restart`, `/restartserver`, `/restart 0`, `/restart 5`, and `/restart 60` work.
 - `/shutdown`, `/shutdown 0`, `/shutdown 5`, and `/shutdown 60` work.
 - `warningIndicator=chat`, `actionbar`, and `both` display warnings correctly.
