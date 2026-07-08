@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.2
+
+- Added a one-time restart request token so only `/restart` can authorize a relaunch.
+- `/shutdown` now cancels any pending restart request before stopping the server.
+- Prevents stale relauncher processes from making a later shutdown look like a restart.
+
 ## 1.2.1
 
 - Removed start-script and free-form launch command execution for CurseForge moderation compliance.

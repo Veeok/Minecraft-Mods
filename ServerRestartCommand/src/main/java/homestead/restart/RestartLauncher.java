@@ -41,14 +41,16 @@ public final class RestartLauncher {
     }
 
     private static void run(String[] args, Path serverDir, Path logPath) throws Exception {
-        if (args.length < 5) {
-            throw new IllegalArgumentException("Expected args: <oldPid> <serverDir> <configPath> <currentJavaExecutable> <currentJvmArgs>");
+        if (args.length < 7) {
+            throw new IllegalArgumentException("Expected args: <oldPid> <serverDir> <configPath> <currentJavaExecutable> <currentJvmArgs> <restartRequestPath> <restartToken>");
         }
 
         long oldPid = Long.parseLong(args[0]);
         Path configPath = Path.of(args[2]).toAbsolutePath().normalize();
         Path currentJavaExecutable = Path.of(args[3]).toAbsolutePath().normalize();
         List<String> currentJvmArgs = decodeCurrentJvmArgs(args[4]);
+        Path restartRequestPath = Path.of(args[5]).toAbsolutePath().normalize();
+        String restartToken = args[6];
 
         if (!Files.isDirectory(serverDir)) {
             throw new IOException("Server directory does not exist: " + serverDir);
@@ -58,11 +60,22 @@ public final class RestartLauncher {
         waitForOldServer(oldPid);
         Thread.sleep(2000L);
 
+        if (!restartRequestIsStillValid(restartRequestPath, restartToken)) {
+            log(logPath, "Restart request was canceled before relaunch. No server process was started.");
+            return;
+        }
+
         LaunchPlan launchPlan = resolveLaunchPlan(serverDir, configPath, currentJavaExecutable, currentJvmArgs);
         log(logPath, "Launch source: " + launchPlan.source());
         log(logPath, "Launching Java server: " + commandForLog(launchPlan.command()));
         launchDetached(serverDir, launchPlan.command(), logPath);
+        Files.deleteIfExists(restartRequestPath);
         log(logPath, "Restart process was handed off.");
+    }
+
+    private static boolean restartRequestIsStillValid(Path restartRequestPath, String restartToken) throws IOException {
+        return Files.isRegularFile(restartRequestPath)
+            && Files.readString(restartRequestPath).trim().equals(restartToken);
     }
 
     static boolean isWindows() {

@@ -22,14 +22,17 @@ import java.lang.management.ManagementFactory;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ServerRestartCommandMod implements ModInitializer {
     private static final String MOD_NAME = "Server Restart Command";
     private static final AtomicBoolean OPERATION_SCHEDULED = new AtomicBoolean(false);
+    private static final Path RESTART_REQUEST = Path.of("config", "server-restart-command-restart-request.flag");
 
     private static RestartConfig config;
 
@@ -85,6 +88,8 @@ public final class ServerRestartCommandMod implements ModInitializer {
             announceCountdown(server, operation, delaySeconds);
             if (operation == Operation.RESTART) {
                 startRestartLauncher();
+            } else {
+                cancelPendingRestartRequest();
             }
             server.execute(() -> {
                 warnPlayers(server, config.nowMessage(operation));
@@ -122,6 +127,8 @@ public final class ServerRestartCommandMod implements ModInitializer {
         long currentPid = ProcessHandle.current().pid();
         Path serverDir = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
         Path configPath = RestartConfig.CONFIG_PATH.toAbsolutePath().normalize();
+        Path restartRequest = RESTART_REQUEST.toAbsolutePath().normalize();
+        String restartToken = currentPid + ":" + Instant.now() + ":" + UUID.randomUUID();
         Path modJar = Path.of(ServerRestartCommandMod.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toAbsolutePath().normalize();
         Path javaExecutable = Path.of(
             System.getProperty("java.home"),
@@ -138,12 +145,29 @@ public final class ServerRestartCommandMod implements ModInitializer {
             serverDir.toString(),
             configPath.toString(),
             javaExecutable.toString(),
-            String.join(RestartLauncher.JVM_ARG_SEPARATOR, ManagementFactory.getRuntimeMXBean().getInputArguments())
+            String.join(RestartLauncher.JVM_ARG_SEPARATOR, ManagementFactory.getRuntimeMXBean().getInputArguments()),
+            restartRequest.toString(),
+            restartToken
         );
 
-        new ProcessBuilder(command)
-            .directory(serverDir.toFile())
-            .start();
+        Files.createDirectories(restartRequest.getParent());
+        Files.writeString(restartRequest, restartToken);
+
+        try {
+            new ProcessBuilder(command)
+                .directory(serverDir.toFile())
+                .start();
+        } catch (IOException | RuntimeException exception) {
+            Files.deleteIfExists(restartRequest);
+            throw exception;
+        }
+    }
+
+    private static void cancelPendingRestartRequest() {
+        try {
+            Files.deleteIfExists(RESTART_REQUEST);
+        } catch (IOException ignored) {
+        }
     }
 
     private static void warnPlayers(MinecraftServer server, String message) {
