@@ -23,12 +23,13 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ServerRestartCommandMod implements ModInitializer {
     private static final String MOD_NAME = "Server Restart Command";
-    private static final AtomicBoolean RESTART_SCHEDULED = new AtomicBoolean(false);
+    private static final AtomicBoolean OPERATION_SCHEDULED = new AtomicBoolean(false);
     private static final Path DEFAULT_RAM_FLAG = Path.of("config", "server-restart-command-default-ram.flag");
 
     private static RestartConfig config;
@@ -39,65 +40,70 @@ public final class ServerRestartCommandMod implements ModInitializer {
         var permission = new PermissionCheck.Require(new Permission.HasCommandLevel(PermissionLevel.byId(config.permissionLevel)));
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(restartCommand("restartserver", permission));
-            dispatcher.register(restartCommand("restart", permission));
+            dispatcher.register(operationCommand("restartserver", Operation.RESTART, permission));
+            dispatcher.register(operationCommand("restart", Operation.RESTART, permission));
+            dispatcher.register(operationCommand("shutdown", Operation.SHUTDOWN, permission));
         });
 
         ServerLifecycleEvents.SERVER_STARTED.register(ServerRestartCommandMod::warnIfDefaultRamFallbackWasUsed);
     }
 
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> restartCommand(
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> operationCommand(
         String name,
+        Operation operation,
         PermissionCheck permission
     ) {
         return Commands.literal(name)
             .requires(Commands.hasPermission(permission))
-            .executes(context -> scheduleRestart(context.getSource(), config.defaultDelaySeconds))
+            .executes(context -> scheduleOperation(context.getSource(), operation, config.defaultDelaySeconds))
             .then(Commands.argument("delay_seconds", IntegerArgumentType.integer(0, 3600))
-                .executes(context -> scheduleRestart(
+                .executes(context -> scheduleOperation(
                     context.getSource(),
+                    operation,
                     IntegerArgumentType.getInteger(context, "delay_seconds")
                 )));
     }
 
-    private static int scheduleRestart(CommandSourceStack source, int delaySeconds) {
+    private static int scheduleOperation(CommandSourceStack source, Operation operation, int delaySeconds) {
         MinecraftServer server = source.getServer();
 
-        if (!RESTART_SCHEDULED.compareAndSet(false, true)) {
-            source.sendFailure(Component.literal(MOD_NAME + ": a restart is already scheduled."));
+        if (!OPERATION_SCHEDULED.compareAndSet(false, true)) {
+            source.sendFailure(Component.literal(MOD_NAME + ": a restart or shutdown is already scheduled."));
             return 0;
         }
 
-        source.sendSuccess(() -> Component.literal(MOD_NAME + ": restart scheduled in " + delaySeconds + " seconds."), true);
+        source.sendSuccess(() -> Component.literal(MOD_NAME + ": " + config.scheduledMessage(operation, delaySeconds)), true);
 
-        Thread restartThread = new Thread(
-            () -> runRestart(server, delaySeconds),
-            "server-restart-command"
+        Thread operationThread = new Thread(
+            () -> runOperation(server, operation, delaySeconds),
+            "server-restart-command-" + operation.configName
         );
-        restartThread.setDaemon(false);
-        restartThread.start();
+        operationThread.setDaemon(false);
+        operationThread.start();
         return 1;
     }
 
-    private static void runRestart(MinecraftServer server, int delaySeconds) {
+    private static void runOperation(MinecraftServer server, Operation operation, int delaySeconds) {
         try {
-            announceCountdown(server, delaySeconds);
-            startRestartLauncher();
+            announceCountdown(server, operation, delaySeconds);
+            if (operation == Operation.RESTART) {
+                startRestartLauncher();
+            }
             server.execute(() -> {
-                broadcast(server, "Restarting server now.");
+                warnPlayers(server, config.nowMessage(operation));
                 server.halt(false);
             });
         } catch (Exception exception) {
-            RESTART_SCHEDULED.set(false);
+            OPERATION_SCHEDULED.set(false);
             server.execute(() -> {
-                broadcast(server, "Restart failed before shutdown. The server is still running. Check restart-server-restart.log and the console for details: " + exception.getMessage());
+                warnPlayers(server, operation.displayName + " failed before shutdown. The server is still running. Check restart-server-restart.log and the console for details: " + exception.getMessage());
                 server.sendSystemMessage(Component.literal("[Server Restart Command] Restart launcher error:"));
                 server.sendSystemMessage(Component.literal(stackTrace(exception)));
             });
         }
     }
 
-    private static void announceCountdown(MinecraftServer server, int delaySeconds) throws InterruptedException {
+    private static void announceCountdown(MinecraftServer server, Operation operation, int delaySeconds) throws InterruptedException {
         if (delaySeconds <= 0) {
             return;
         }
@@ -105,7 +111,7 @@ public final class ServerRestartCommandMod implements ModInitializer {
         for (int remaining = delaySeconds; remaining > 0; remaining--) {
             if (shouldAnnounce(remaining, delaySeconds)) {
                 int seconds = remaining;
-                server.execute(() -> broadcast(server, "Server restarting in " + seconds + " seconds."));
+                server.execute(() -> warnPlayers(server, config.warningMessage(operation, seconds)));
             }
             Thread.sleep(1000L);
         }
@@ -143,8 +149,37 @@ public final class ServerRestartCommandMod implements ModInitializer {
             .start();
     }
 
-    private static void broadcast(MinecraftServer server, String message) {
-        server.getPlayerList().broadcastSystemMessage(Component.literal("[Server] " + message), false);
+    private static void warnPlayers(MinecraftServer server, String message) {
+        Component warning = Component.literal(message).withStyle(config.warningColor);
+        boolean sentChat = false;
+
+        if (config.warningIndicator.showChat) {
+            server.getPlayerList().broadcastSystemMessage(warning, false);
+            sentChat = true;
+        }
+
+        if (config.warningIndicator.showActionBar && !sendActionBar(server, warning) && !sentChat) {
+            server.getPlayerList().broadcastSystemMessage(warning, false);
+        }
+    }
+
+    private static boolean sendActionBar(MinecraftServer server, Component message) {
+        try {
+            Object playerList = server.getPlayerList();
+            Method getPlayers = playerList.getClass().getMethod("getPlayers");
+            Method displayClientMessage = null;
+
+            for (Object player : (List<?>) getPlayers.invoke(playerList)) {
+                if (displayClientMessage == null) {
+                    displayClientMessage = player.getClass().getMethod("displayClientMessage", Component.class, boolean.class);
+                }
+                displayClientMessage.invoke(player, message, true);
+            }
+            return true;
+        } catch (ReflectiveOperationException exception) {
+            server.sendSystemMessage(Component.literal("[Server Restart Command] Could not send action-bar warning: " + exception.getMessage()));
+            return false;
+        }
     }
 
     private static String stackTrace(Exception exception) {
@@ -208,16 +243,54 @@ public final class ServerRestartCommandMod implements ModInitializer {
         }
     }
 
-    private record RestartConfig(String launchCommand, boolean preferStartScript, int defaultDelaySeconds, int permissionLevel, int defaultRamWarningDelaySeconds) {
+    private enum Operation {
+        RESTART("restart"),
+        SHUTDOWN("shutdown");
+
+        private final String configName;
+        private final String displayName;
+
+        Operation(String configName) {
+            this.configName = configName;
+            this.displayName = configName.substring(0, 1).toUpperCase(Locale.ROOT) + configName.substring(1);
+        }
+    }
+
+    private enum WarningIndicator {
+        CHAT(true, false),
+        ACTIONBAR(false, true),
+        BOTH(true, true);
+
+        private final boolean showChat;
+        private final boolean showActionBar;
+
+        WarningIndicator(boolean showChat, boolean showActionBar) {
+            this.showChat = showChat;
+            this.showActionBar = showActionBar;
+        }
+    }
+
+    private record RestartConfig(
+        String launchCommand,
+        boolean preferStartScript,
+        int defaultDelaySeconds,
+        int permissionLevel,
+        int defaultRamWarningDelaySeconds,
+        WarningIndicator warningIndicator,
+        ChatFormatting warningColor,
+        String restartWarningMessage,
+        String restartNowMessage,
+        String restartScheduledMessage,
+        String shutdownWarningMessage,
+        String shutdownNowMessage,
+        String shutdownScheduledMessage
+    ) {
         private static final Path CONFIG_PATH = Path.of("config", "server-restart-command.properties");
 
         private static RestartConfig load() {
+            Properties defaults = defaultProperties();
             Properties properties = new Properties();
-            properties.setProperty("launchCommand", "");
-            properties.setProperty("preferStartScript", "true");
-            properties.setProperty("defaultDelaySeconds", "5");
-            properties.setProperty("permissionLevel", "4");
-            properties.setProperty("defaultRamWarningDelaySeconds", "60");
+            boolean shouldSave = false;
 
             try {
                 if (Files.exists(CONFIG_PATH)) {
@@ -226,6 +299,17 @@ public final class ServerRestartCommandMod implements ModInitializer {
                     }
                 } else {
                     Files.createDirectories(CONFIG_PATH.getParent());
+                    shouldSave = true;
+                }
+
+                for (String key : defaults.stringPropertyNames()) {
+                    if (!properties.containsKey(key)) {
+                        properties.setProperty(key, defaults.getProperty(key));
+                        shouldSave = true;
+                    }
+                }
+
+                if (shouldSave) {
                     try (OutputStream output = Files.newOutputStream(CONFIG_PATH)) {
                         properties.store(output, "Server Restart Command configuration");
                     }
@@ -239,8 +323,55 @@ public final class ServerRestartCommandMod implements ModInitializer {
                 readBoolean(properties, "preferStartScript", true),
                 readInt(properties, "defaultDelaySeconds", 5, 0, 3600),
                 readInt(properties, "permissionLevel", 4, 0, 4),
-                readInt(properties, "defaultRamWarningDelaySeconds", 60, 0, 300)
+                readInt(properties, "defaultRamWarningDelaySeconds", 60, 0, 300),
+                readWarningIndicator(properties, "warningIndicator", WarningIndicator.BOTH),
+                readWarningColor(properties, "warningColor", ChatFormatting.YELLOW),
+                properties.getProperty("restartWarningMessage"),
+                properties.getProperty("restartNowMessage"),
+                properties.getProperty("restartScheduledMessage"),
+                properties.getProperty("shutdownWarningMessage"),
+                properties.getProperty("shutdownNowMessage"),
+                properties.getProperty("shutdownScheduledMessage")
             );
+        }
+
+        private static Properties defaultProperties() {
+            Properties properties = new Properties();
+            properties.setProperty("launchCommand", "");
+            properties.setProperty("preferStartScript", "true");
+            properties.setProperty("defaultDelaySeconds", "5");
+            properties.setProperty("permissionLevel", "4");
+            properties.setProperty("defaultRamWarningDelaySeconds", "60");
+            properties.setProperty("warningIndicator", "both");
+            properties.setProperty("warningColor", "yellow");
+            properties.setProperty("restartWarningMessage", "[SERVER] Restart in {seconds} {second_word}.");
+            properties.setProperty("restartNowMessage", "[SERVER] Restarting now.");
+            properties.setProperty("restartScheduledMessage", "Restart scheduled in {seconds} {second_word}.");
+            properties.setProperty("shutdownWarningMessage", "[SERVER] Shutdown in {seconds} {second_word}.");
+            properties.setProperty("shutdownNowMessage", "[SERVER] Shutting down now.");
+            properties.setProperty("shutdownScheduledMessage", "Shutdown scheduled in {seconds} {second_word}.");
+            return properties;
+        }
+
+        private String warningMessage(Operation operation, int seconds) {
+            return format(operation == Operation.RESTART ? restartWarningMessage : shutdownWarningMessage, operation, seconds);
+        }
+
+        private String nowMessage(Operation operation) {
+            return format(operation == Operation.RESTART ? restartNowMessage : shutdownNowMessage, operation, 0);
+        }
+
+        private String scheduledMessage(Operation operation, int seconds) {
+            return format(operation == Operation.RESTART ? restartScheduledMessage : shutdownScheduledMessage, operation, seconds);
+        }
+
+        private static String format(String template, Operation operation, int seconds) {
+            String secondsText = Integer.toString(seconds);
+            String secondWord = seconds == 1 ? "second" : "seconds";
+            return template
+                .replace("{seconds}", secondsText)
+                .replace("{second_word}", secondWord)
+                .replace("{operation}", operation.configName);
         }
 
         private static int readInt(Properties properties, String key, int fallback, int min, int max) {
@@ -258,6 +389,32 @@ public final class ServerRestartCommandMod implements ModInitializer {
                 return fallback;
             }
             return Boolean.parseBoolean(value.trim());
+        }
+
+        private static WarningIndicator readWarningIndicator(Properties properties, String key, WarningIndicator fallback) {
+            String value = properties.getProperty(key);
+            if (value == null || value.isBlank()) {
+                return fallback;
+            }
+
+            try {
+                return WarningIndicator.valueOf(value.trim().toUpperCase(Locale.ROOT).replace('-', '_'));
+            } catch (IllegalArgumentException ignored) {
+                return fallback;
+            }
+        }
+
+        private static ChatFormatting readWarningColor(Properties properties, String key, ChatFormatting fallback) {
+            String value = properties.getProperty(key);
+            if (value == null || value.isBlank()) {
+                return fallback;
+            }
+
+            try {
+                return ChatFormatting.valueOf(value.trim().toUpperCase(Locale.ROOT).replace('-', '_'));
+            } catch (IllegalArgumentException ignored) {
+                return fallback;
+            }
         }
     }
 }

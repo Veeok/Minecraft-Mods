@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+
+- Added `/shutdown` and `/shutdown <delay_seconds>` to stop the server without relaunching.
+- Added configurable player warning display with `warningIndicator=chat`, `actionbar`, or `both`.
+- Added configurable warning color with `warningColor`.
+- Added configurable restart and shutdown warning, scheduled, and final messages.
+- Added `{seconds}`, `{second_word}`, and `{operation}` placeholders for warning messages.
+- Existing config files are backfilled with new keys on startup.
+
 ## 1.1.2
 
 - Reduced duplicate restart messages in the server log by using one broadcast path.

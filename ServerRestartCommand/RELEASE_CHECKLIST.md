@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-1.1.2 is Beta.
+1.2.0 is Beta.
 
 Windows `start.bat` restart has been tested on a live dedicated server. Linux and macOS relaunch paths are implemented but still need live validation before marking the mod Stable/Release.
 
@@ -15,6 +15,9 @@ Windows `start.bat` restart has been tested on a live dedicated server. Linux an
 - Linux `launchCommand` restart succeeds on a dedicated server.
 - macOS `start.sh` restart succeeds, if macOS support is advertised.
 - `/restart`, `/restartserver`, `/restart 0`, `/restart 5`, and `/restart 60` work.
+- `/shutdown`, `/shutdown 0`, `/shutdown 5`, and `/shutdown 60` work.
+- `warningIndicator=chat`, `actionbar`, and `both` display warnings correctly.
+- Custom restart and shutdown warning messages display configured text.
 - Non-operators cannot run the command when `permissionLevel=4`.
 - Server saves worlds cleanly before shutdown.
 - Restart does not leave duplicate Java server processes.

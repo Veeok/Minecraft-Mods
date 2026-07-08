@@ -14,8 +14,12 @@ Current stage: Beta. Windows restart has been tested on a live dedicated server.
 - `/restartserver`
 - `/restart <delay_seconds>`
 - `/restartserver <delay_seconds>`
+- `/shutdown`
+- `/shutdown <delay_seconds>`
 
 The commands work from in-game for permitted operators and from the server console.
+
+`/restart` stops the server and starts it again. `/shutdown` stops the server only.
 
 ## How Restarting Works
 
@@ -47,9 +51,31 @@ preferStartScript=true
 defaultDelaySeconds=5
 permissionLevel=4
 defaultRamWarningDelaySeconds=60
+warningIndicator=both
+warningColor=yellow
+restartWarningMessage=[SERVER] Restart in {seconds} {second_word}.
+restartNowMessage=[SERVER] Restarting now.
+restartScheduledMessage=Restart scheduled in {seconds} {second_word}.
+shutdownWarningMessage=[SERVER] Shutdown in {seconds} {second_word}.
+shutdownNowMessage=[SERVER] Shutting down now.
+shutdownScheduledMessage=Shutdown scheduled in {seconds} {second_word}.
 ```
 
 If `preferStartScript=true`, the mod uses `start.bat`/`start.sh` first. Set it to `false` to always use `launchCommand`.
+
+`warningIndicator` controls where player warnings appear:
+
+- `chat`
+- `actionbar`
+- `both`
+
+Message placeholders:
+
+- `{seconds}` - the number of seconds left.
+- `{second_word}` - `second` or `seconds`.
+- `{operation}` - `restart` or `shutdown`.
+
+You can translate the warning messages into any language by editing the message values in the config file.
 
 ## Requirements
 
