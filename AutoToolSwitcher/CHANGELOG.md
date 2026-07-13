@@ -1,5 +1,14 @@
 # Changelog
 
+## Auto Tool Switcher 1.4.5
+
+Release version correction.
+
+### Changed
+
+- Published the stabilized build as `1.4.5` to provide a distinct release version for distribution platforms.
+- No behavior changes from `1.4.4`.
+
 ## Auto Tool Switcher 1.4.4
 
 Stability and settings refinement.
