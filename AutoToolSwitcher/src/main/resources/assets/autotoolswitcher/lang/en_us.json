@@ -1,8 +1,8 @@
 {
-  "key.categories.autotoolswitcher.controls": "Auto Tool Switcher",
-  "key.autotoolswitcher.toggle_enabled": "Toggle Auto Tool Switcher",
-  "key.autotoolswitcher.toggle_look": "Toggle Block Look Switching",
-  "key.autotoolswitcher.toggle_mine": "Toggle Mining Switching",
-  "key.autotoolswitcher.toggle_combat": "Toggle Combat Switching",
-  "key.autotoolswitcher.hold_pause": "Hold to Pause Auto Switching"
+  "key.categories.autotoolswitcher.controls": "Auto Tool Switcher (ATS)",
+  "key.autotoolswitcher.toggle_enabled": "ATS: Toggle Auto Tool Switcher",
+  "key.autotoolswitcher.toggle_look": "ATS: Toggle Block Look Switching",
+  "key.autotoolswitcher.toggle_mine": "ATS: Toggle Mining Switching",
+  "key.autotoolswitcher.toggle_combat": "ATS: Toggle Combat Switching",
+  "key.autotoolswitcher.hold_pause": "ATS: Hold to Pause Auto Switching"
 }

@@ -3,7 +3,7 @@
   "id": "autotoolswitcher",
   "version": "${version}",
   "name": "Auto Tool Switcher",
-  "description": "Client-side hotbar tool selection helper for Fabric. Includes Mod Menu settings, slot filters, durability safety, combat helpers, profiles, and slot restore.",
+  "description": "Automatically switches to the best hotbar tool for blocks and hostile mobs.",
   "authors": [
     "Veok"
   ],
@@ -19,13 +19,16 @@
       "com.veok.autotoolswitcher.AutoToolSwitcherModMenuIntegration"
     ]
   },
+  "mixins": [
+    "autotoolswitcher.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.19.3",
     "minecraft": ">=26.1 <=26.2",
     "java": ">=25",
     "modmenu": ">=18.0.0-beta.1",
     "cloth-config": ">=26.1.154",
-    "fabric-api": "*"
+    "fabric-api": ">=0.154.0+26.1.2"
   },
   "custom": {
     "modmenu": {

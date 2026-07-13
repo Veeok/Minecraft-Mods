@@ -1,5 +1,40 @@
 # Changelog
 
+## Auto Tool Switcher 1.4.4
+
+Stability and settings refinement.
+
+### Changed
+
+- Updated the Mod Menu summary to: `Automatically switches to the best hotbar tool for blocks and hostile mobs.`
+- Renamed keybind actions with an `ATS:` prefix so they are easy to identify in Controls.
+- Keybinds remain unbound by default to avoid conflicts with Minecraft or other mods.
+- Fixed mining logic so non-tools with normal block speed are not selected as fake “best tools”.
+- Cleaned up melee wording in commands and Mod Menu.
+- Building profile now disables hostile-mob melee switching.
+- Added a status warning when no hotbar slots are allowed.
+- Reorganized the Mod Menu settings into Quick Start, Switching, Protection & Restore, Advanced, and Hotbar Slots.
+- Moved profile setup into Quick Start and made profiles apply after all other settings when saved.
+- Expanded the durability slider to the full supported range of 0-256.
+
+### Fixed
+
+- Tool selection now happens before mining, block-use, and attack actions, including one-click actions.
+- Prevented duplicate carried-slot packets after an automatic slot change.
+- Paused switching while any game screen is open, preventing changes during chat, inventory, Mod Menu, and other screens.
+- Enforced the documented Fabric API minimum in mod metadata.
+- Made malformed boolean and hotbar-slot config values fall back safely instead of changing settings unexpectedly.
+- Made config saves use a temporary file and atomic replacement when supported, protecting the previous config from interrupted writes.
+- Removed redundant hit-result checks and a deprecated no-op hostile-target check.
+
+## Auto Tool Switcher 1.4.3
+
+Visual update.
+
+### Changed
+
+- Replaced the icon with the new Minecraft-style tool switching artwork.
+
 ## Auto Tool Switcher 1.4.2
 
 Visual update.

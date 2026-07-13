@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "com.veok.autotoolswitcher.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "MultiPlayerGameModeAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

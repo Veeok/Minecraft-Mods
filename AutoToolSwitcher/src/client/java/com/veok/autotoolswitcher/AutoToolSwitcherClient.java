@@ -2,12 +2,16 @@ package com.veok.autotoolswitcher;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.veok.autotoolswitcher.mixin.MultiPlayerGameModeAccessor;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.event.client.player.ClientPreAttackCallback;
+import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
@@ -22,8 +26,11 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.EntityTypeTags;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Enemy;
@@ -36,13 +43,16 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.HitResult;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Properties;
@@ -53,7 +63,9 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     private static final float SWITCH_THRESHOLD = 0.001F;
     private static final int MANUAL_OVERRIDE_COOLDOWN_TICKS = 10;
     private static final int HOTBAR_SIZE = 9;
+    static final int MAX_MIN_DURABILITY_LEFT = 256;
     private static final KeyMapping.Category KEY_CATEGORY = KeyMapping.Category.register(Identifier.fromNamespaceAndPath("autotoolswitcher", "controls"));
+    private static final ScreenStateChecker SCREEN_STATE_CHECKER = createScreenStateChecker();
 
     static final boolean DEFAULT_ENABLED = true;
     static final boolean DEFAULT_SWITCH_FOR_BLOCKS_ON_LOOK = false;
@@ -106,7 +118,37 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
         loadConfig();
         registerKeyMappings();
         registerCommand();
+        registerInteractionCallbacks();
         ClientTickEvents.END_CLIENT_TICK.register(AutoToolSwitcherClient::tick);
+    }
+
+    private static void registerInteractionCallbacks() {
+        ClientPreAttackCallback.EVENT.register((client, player, attackKeyPressCount) -> {
+            if (canAutoSwitchNow(client) && manualOverrideCooldown == 0) {
+                switchToBestTarget(client, findBestCombatTarget(client));
+            }
+
+            // Returning false preserves vanilla attack handling.
+            return false;
+        });
+
+        AttackBlockCallback.EVENT.register((player, level, hand, pos, direction) -> {
+            Minecraft client = Minecraft.getInstance();
+            if (canAutoSwitchNow(client) && manualOverrideCooldown == 0 && client.player == player) {
+                BlockState state = level.getBlockState(pos);
+                switchToBestTarget(client, findBestMiningTarget(client, state));
+            }
+            return InteractionResult.PASS;
+        });
+
+        UseBlockCallback.EVENT.register((player, level, hand, blockHit) -> {
+            Minecraft client = Minecraft.getInstance();
+            if (canAutoSwitchNow(client) && manualOverrideCooldown == 0 && client.player == player) {
+                BlockState state = level.getBlockState(blockHit.getBlockPos());
+                switchToBestTarget(client, findBestInteractionTarget(client, state));
+            }
+            return InteractionResult.PASS;
+        });
     }
 
     private static void registerKeyMappings() {
@@ -151,7 +193,7 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
                     .executes(context -> setEnabled(!enabled)))
                 .then(booleanCommand("look", () -> switchForBlocksOnLook, value -> switchForBlocksOnLook = value, "Block look switching"))
                 .then(booleanCommand("mine", () -> switchForBlocksWhileMining, value -> switchForBlocksWhileMining = value, "Block mining switching"))
-                .then(booleanCommand("attack", () -> switchForHostileMobs, value -> switchForHostileMobs = value, "Hostile mob sword switching"))
+                .then(booleanCommand("attack", () -> switchForHostileMobs, value -> switchForHostileMobs = value, "Hostile mob melee switching"))
                 .then(booleanCommand("restore", () -> restorePreviousSlot, value -> restorePreviousSlot = value, "Restore previous slot"))
                 .then(booleanCommand("drop-safe", () -> pauseWhileDropKeyDown, value -> pauseWhileDropKeyDown = value, "Drop safety"))
                 .then(booleanCommand("durability", () -> durabilitySafety, value -> durabilitySafety = value, "Durability safety"))
@@ -270,6 +312,7 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
             }
             case BUILDING -> {
                 switchForBlocksWhileMining = false;
+                switchForHostileMobs = false;
                 switchForRightClickBlocks = true;
                 restoreDelayTicks = 12;
             }
@@ -315,6 +358,10 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
 
         if (enabled && !hasAnyTriggerEnabled()) {
             client.player.sendSystemMessage(Component.literal("No trigger modes are enabled. Turn on mine, attack, look, right-click, or ranged.").withStyle(ChatFormatting.YELLOW));
+        }
+
+        if (enabled && !hasAnyAllowedSlot()) {
+            client.player.sendSystemMessage(Component.literal("No hotbar slots are allowed, so auto switching cannot pick anything.").withStyle(ChatFormatting.YELLOW));
         }
     }
 
@@ -380,12 +427,7 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     private static void tick(Minecraft client) {
         processKeyMappings(client);
 
-        if (!enabled || client.player == null || client.level == null || client.gameMode == null) {
-            finishAutoSwitch(client);
-            return;
-        }
-
-        if (client.player.isCreative() || client.player.isSpectator()) {
+        if (!canAutoSwitchNow(client)) {
             finishAutoSwitch(client);
             return;
         }
@@ -396,11 +438,6 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
 
         if (manualOverrideCooldown > 0) {
             manualOverrideCooldown--;
-            return;
-        }
-
-        if (holdPauseKey.isDown() || pauseWhileDropKeyDown && client.options.keyDrop.isDown()) {
-            finishAutoSwitch(client);
             return;
         }
 
@@ -415,8 +452,21 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
         switchToSlot(client, target.slot(), target.reason());
     }
 
+    private static boolean canAutoSwitchNow(Minecraft client) {
+        return enabled
+            && client.player != null
+            && client.level != null
+            && client.gameMode != null
+            && !SCREEN_STATE_CHECKER.isOpen(client)
+            && !client.player.isCreative()
+            && !client.player.isSpectator()
+            && !isPauseKeyDown()
+            && !(pauseWhileDropKeyDown && client.options.keyDrop.isDown())
+            && hasAnyAllowedSlot();
+    }
+
     private static void processKeyMappings(Minecraft client) {
-        if (client.player == null) {
+        if (client.player == null || toggleEnabledKey == null || toggleLookKey == null || toggleMineKey == null || toggleCombatKey == null) {
             return;
         }
 
@@ -445,6 +495,44 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
         }
     }
 
+    private static boolean isPauseKeyDown() {
+        return holdPauseKey != null && holdPauseKey.isDown();
+    }
+
+    private static ScreenStateChecker createScreenStateChecker() {
+        try {
+            Field screenField = Minecraft.class.getField("screen");
+            return client -> getFieldValue(screenField, client) != null;
+        } catch (NoSuchFieldException ignored) {
+            try {
+                Field guiField = Minecraft.class.getField("gui");
+                Method screenMethod = guiField.getType().getMethod("screen");
+                return client -> {
+                    Object gui = getFieldValue(guiField, client);
+                    return gui != null && invokeMethod(screenMethod, gui) != null;
+                };
+            } catch (NoSuchFieldException | NoSuchMethodException ignoredAgain) {
+                return client -> false;
+            }
+        }
+    }
+
+    private static Object getFieldValue(Field field, Object owner) {
+        try {
+            return field.get(owner);
+        } catch (IllegalAccessException ignored) {
+            return null;
+        }
+    }
+
+    private static Object invokeMethod(Method method, Object owner) {
+        try {
+            return method.invoke(owner);
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
     private static boolean wasManuallyOverridden(Minecraft client) {
         if (autoSelectedSlot < 0 || client.player == null) {
             return false;
@@ -461,6 +549,10 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     }
 
     private static AutoSwitchTarget findBestTarget(Minecraft client, int selectedSlot) {
+        if (!hasAnyAllowedSlot()) {
+            return null;
+        }
+
         AutoSwitchTarget combatTarget = findBestCombatTarget(client);
         if (combatTarget != null) {
             return combatTarget;
@@ -475,7 +567,7 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     }
 
     private static AutoSwitchTarget findBestCombatTarget(Minecraft client) {
-        if (!(client.hitResult instanceof EntityHitResult entityHit) || entityHit.getType() != HitResult.Type.ENTITY) {
+        if (!(client.hitResult instanceof EntityHitResult entityHit)) {
             return null;
         }
 
@@ -507,7 +599,6 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     private static boolean isHostileLivingTarget(Entity entity) {
         return entity instanceof Enemy
             && entity instanceof LivingEntity living
-            && entity.isAttackable()
             && living.isAlive()
             && !living.isDeadOrDying();
     }
@@ -517,8 +608,15 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
             return null;
         }
 
-        BlockState state = getTargetBlockState(client);
-        if (state == null) {
+        return findBestInteractionTarget(client, getTargetBlockState(client), selectedSlot);
+    }
+
+    private static AutoSwitchTarget findBestInteractionTarget(Minecraft client, BlockState state) {
+        return findBestInteractionTarget(client, state, client.player.getInventory().getSelectedSlot());
+    }
+
+    private static AutoSwitchTarget findBestInteractionTarget(Minecraft client, BlockState state, int selectedSlot) {
+        if (!switchForRightClickBlocks || state == null || state.isAir()) {
             return null;
         }
 
@@ -532,8 +630,19 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
             return null;
         }
 
-        BlockState state = getTargetBlockState(client);
-        if (state == null) {
+        return findBestBlockTarget(client, getTargetBlockState(client), selectedSlot);
+    }
+
+    private static AutoSwitchTarget findBestMiningTarget(Minecraft client, BlockState state) {
+        if (!switchForBlocksWhileMining) {
+            return null;
+        }
+
+        return findBestBlockTarget(client, state, client.player.getInventory().getSelectedSlot());
+    }
+
+    private static AutoSwitchTarget findBestBlockTarget(Minecraft client, BlockState state, int selectedSlot) {
+        if (state == null || state.isAir()) {
             return null;
         }
 
@@ -542,7 +651,7 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     }
 
     private static BlockState getTargetBlockState(Minecraft client) {
-        if (!(client.hitResult instanceof BlockHitResult blockHit) || blockHit.getType() != HitResult.Type.BLOCK) {
+        if (!(client.hitResult instanceof BlockHitResult blockHit)) {
             return null;
         }
 
@@ -551,7 +660,9 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     }
 
     private static int findBestMeleeSlot(Minecraft client, LivingEntity target) {
-        return findBestSlot(client, -1, stack -> meleeScore(client, stack, target));
+        boolean sensitiveToSmite = isEntityTypeInTag(client, target.getType(), EntityTypeTags.SENSITIVE_TO_SMITE);
+        boolean sensitiveToBane = isEntityTypeInTag(client, target.getType(), EntityTypeTags.SENSITIVE_TO_BANE_OF_ARTHROPODS);
+        return findBestSlot(client, -1, stack -> meleeScore(client, stack, sensitiveToSmite, sensitiveToBane));
     }
 
     private static int findBestRangedSlot(Minecraft client) {
@@ -591,12 +702,12 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
             return 0.0D;
         }
 
-        float speed = stack.getDestroySpeed(state);
-        if (speed <= 1.0F) {
-            return speed;
+        if (state.requiresCorrectToolForDrops() && !stack.isCorrectToolForDrops(state)) {
+            return 0.0D;
         }
 
-        if (state.requiresCorrectToolForDrops() && !stack.isCorrectToolForDrops(state)) {
+        float speed = stack.getDestroySpeed(state);
+        if (speed <= 1.0F) {
             return 0.0D;
         }
 
@@ -642,14 +753,14 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
         return 0.0D;
     }
 
-    private static double meleeScore(Minecraft client, ItemStack stack, LivingEntity target) {
+    private static double meleeScore(Minecraft client, ItemStack stack, boolean sensitiveToSmite, boolean sensitiveToBane) {
         if (stack.isEmpty() || isUnsafeToUse(stack) || !isMeleeCandidate(stack)) {
             return 0.0D;
         }
 
         double[] attackDamage = {0.0D};
         stack.forEachModifier(EquipmentSlot.MAINHAND, (attribute, modifier) -> {
-            if (attribute.is(Attributes.ATTACK_DAMAGE)) {
+            if (attribute.equals(Attributes.ATTACK_DAMAGE)) {
                 attackDamage[0] += modifier.amount();
             }
         });
@@ -659,11 +770,11 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
             attackDamage[0] += 0.5D * sharpnessLevel + 0.5D;
         }
 
-        if (target.getType().builtInRegistryHolder().is(EntityTypeTags.SENSITIVE_TO_SMITE)) {
+        if (sensitiveToSmite) {
             attackDamage[0] += getEnchantmentLevel(client, stack, Enchantments.SMITE) * 2.5D;
         }
 
-        if (target.getType().builtInRegistryHolder().is(EntityTypeTags.SENSITIVE_TO_BANE_OF_ARTHROPODS)) {
+        if (sensitiveToBane) {
             attackDamage[0] += getEnchantmentLevel(client, stack, Enchantments.BANE_OF_ARTHROPODS) * 2.5D;
         }
 
@@ -693,11 +804,18 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     }
 
     private static boolean isItem(ItemStack stack, net.minecraft.tags.TagKey<net.minecraft.world.item.Item> tag) {
-        return stack.getItem().builtInRegistryHolder().is(tag);
+        return stack.is(holder -> holder.is(tag));
     }
 
     private static boolean isBlock(BlockState state, net.minecraft.tags.TagKey<Block> tag) {
-        return state.getBlock().builtInRegistryHolder().is(tag);
+        return state.is(tag, ignored -> true);
+    }
+
+    private static boolean isEntityTypeInTag(Minecraft client, EntityType<?> type, TagKey<EntityType<?>> tag) {
+        return client.level.registryAccess()
+            .lookupOrThrow(Registries.ENTITY_TYPE)
+            .wrapAsHolder(type)
+            .is(tag);
     }
 
     private static int getEnchantmentLevel(Minecraft client, ItemStack stack, ResourceKey<Enchantment> enchantmentKey) {
@@ -742,6 +860,14 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
         }
     }
 
+    private static void switchToBestTarget(Minecraft client, AutoSwitchTarget target) {
+        if (target == null || wasManuallyOverridden(client)) {
+            return;
+        }
+
+        switchToSlot(client, target.slot(), target.reason());
+    }
+
     private static void finishAutoSwitchWhenIdle(Minecraft client) {
         if (autoSelectedSlot < 0) {
             clearAutoSwitch();
@@ -775,6 +901,9 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
         client.player.getInventory().setSelectedSlot(slot);
         ClientPacketListener connection = client.getConnection();
         if (connection != null) {
+            if (client.gameMode instanceof MultiPlayerGameModeAccessor accessor) {
+                accessor.autotoolswitcher$setCarriedIndex(slot);
+            }
             connection.send(new ServerboundSetCarriedItemPacket(slot));
         }
     }
@@ -791,6 +920,15 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
 
     static void allowAllSlots() {
         Arrays.fill(allowedHotbarSlots, true);
+    }
+
+    private static boolean hasAnyAllowedSlot() {
+        for (int slot = 0; slot < HOTBAR_SIZE; slot++) {
+            if (isSlotAllowed(slot)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean[] defaultAllowedSlots() {
@@ -829,7 +967,7 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
                 allowMacesForCombat = getBoolean(properties, "allowMacesForCombat", false);
                 switchForRangedCombat = getBoolean(properties, "switchForRangedCombat", false);
                 showHudIndicator = getBoolean(properties, "showHudIndicator", false);
-                minDurabilityLeft = getInt(properties, "minDurabilityLeft", DEFAULT_MIN_DURABILITY_LEFT, 0, 256);
+                minDurabilityLeft = getInt(properties, "minDurabilityLeft", DEFAULT_MIN_DURABILITY_LEFT, 0, MAX_MIN_DURABILITY_LEFT);
                 restoreDelayTicks = getInt(properties, "restoreDelayTicks", DEFAULT_RESTORE_DELAY_TICKS, 0, 60);
                 rangedCombatDistance = getInt(properties, "rangedCombatDistance", DEFAULT_RANGED_COMBAT_DISTANCE, 1, 64);
                 miningPreference = getEnum(properties, "miningPreference", MiningPreference.class, DEFAULT_MINING_PREFERENCE);
@@ -847,7 +985,15 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
 
     private static boolean getBoolean(Properties properties, String key, boolean defaultValue) {
         String value = properties.getProperty(key);
-        return value == null ? defaultValue : Boolean.parseBoolean(value);
+        if (value == null) {
+            return defaultValue;
+        }
+
+        return switch (value.trim().toLowerCase(Locale.ROOT)) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> defaultValue;
+        };
     }
 
     private static int getInt(Properties properties, String key, int defaultValue, int min, int max) {
@@ -873,12 +1019,16 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
 
     private static boolean[] getAllowedSlots(String value) {
         boolean[] slots = defaultAllowedSlots();
-        if (value == null) {
+        if (value == null || value.length() != HOTBAR_SIZE) {
             return slots;
         }
 
-        for (int slot = 0; slot < HOTBAR_SIZE && slot < value.length(); slot++) {
-            slots[slot] = value.charAt(slot) == '1';
+        for (int slot = 0; slot < HOTBAR_SIZE; slot++) {
+            char slotValue = value.charAt(slot);
+            if (slotValue != '0' && slotValue != '1') {
+                return defaultAllowedSlots();
+            }
+            slots[slot] = slotValue == '1';
         }
         return slots;
     }
@@ -904,8 +1054,19 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
         properties.setProperty("allowedHotbarSlots", allowedSlotsProperty());
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
-            try (OutputStream output = Files.newOutputStream(CONFIG_PATH)) {
-                properties.store(output, "Auto Tool Switcher client config");
+            Path temporaryPath = Files.createTempFile(CONFIG_PATH.getParent(), "autotoolswitcher-", ".tmp");
+            try {
+                try (OutputStream output = Files.newOutputStream(temporaryPath)) {
+                    properties.store(output, "Auto Tool Switcher client config");
+                }
+
+                try {
+                    Files.move(temporaryPath, CONFIG_PATH, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                } catch (AtomicMoveNotSupportedException ignored) {
+                    Files.move(temporaryPath, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } finally {
+                Files.deleteIfExists(temporaryPath);
             }
         } catch (IOException ignored) {
             // The current session still uses the new values if saving fails.
@@ -921,7 +1082,7 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
     }
 
     private static void clampSettings() {
-        minDurabilityLeft = clamp(minDurabilityLeft, 0, 256);
+        minDurabilityLeft = clamp(minDurabilityLeft, 0, MAX_MIN_DURABILITY_LEFT);
         restoreDelayTicks = clamp(restoreDelayTicks, 0, 60);
         rangedCombatDistance = clamp(rangedCombatDistance, 1, 64);
         if (allowedHotbarSlots == null || allowedHotbarSlots.length != HOTBAR_SIZE) {
@@ -973,6 +1134,10 @@ public final class AutoToolSwitcherClient implements ClientModInitializer {
 
     private interface StackScorer {
         double score(ItemStack stack);
+    }
+
+    private interface ScreenStateChecker {
+        boolean isOpen(Minecraft client);
     }
 
     private interface BooleanSettingSetter {

@@ -15,7 +15,7 @@ It keeps your hotbar from being annoying:
 
 ## Required Mods
 
-- Fabric API
+- Fabric API `0.154.0+26.1.2` or newer
 - Mod Menu `18.0.0-beta.1` or newer
 - Cloth Config `26.1.154` or newer
 
@@ -31,9 +31,9 @@ If Mod Menu or Cloth Config is missing, Fabric will stop loading and tell you wh
 
 Open `Mods > Auto Tool Switcher > Configure`.
 
-The UI has toggles for mining, look switching, hostile mob sword switching, restore, and drop safety.
+The Quick Start tab has the master switch and optional presets. The Switching and Protection & Restore tabs cover everyday settings without overwhelming you.
 
-It also has advanced settings for slot filters, durability limits, restore delay, mining preference, optional combat tools, optional ranged switching, and profiles.
+Protection & Restore covers durability limits and restore delay. Advanced and Hotbar Slots keep mining preference, optional combat tools, optional ranged switching, slot filters, and keybind guidance available when you need them.
 
 ## Changelog
 

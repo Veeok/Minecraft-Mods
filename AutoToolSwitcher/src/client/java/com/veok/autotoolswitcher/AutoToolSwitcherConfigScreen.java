@@ -14,25 +14,28 @@ public final class AutoToolSwitcherConfigScreen {
     }
 
     public static Screen create(Screen parent) {
+        AutoToolSwitcherClient.ProfilePreset[] profileToApply = {AutoToolSwitcherClient.ProfilePreset.CUSTOM};
         ConfigBuilder builder = ConfigBuilder.create()
             .setParentScreen(parent)
             .setTitle(Component.literal("Auto Tool Switcher"))
-            .setSavingRunnable(AutoToolSwitcherClient::applyAndSaveConfig);
+            .setSavingRunnable(() -> {
+                AutoToolSwitcherClient.applyProfile(profileToApply[0]);
+                AutoToolSwitcherClient.applyAndSaveConfig();
+            });
 
         ConfigEntryBuilder entries = builder.entryBuilder();
-        ConfigCategory general = builder.getOrCreateCategory(Component.literal("General"));
-        ConfigCategory triggers = builder.getOrCreateCategory(Component.literal("Triggers"));
-        ConfigCategory safety = builder.getOrCreateCategory(Component.literal("Safety"));
+        ConfigCategory quickStart = builder.getOrCreateCategory(Component.literal("Quick Start"));
+        ConfigCategory switching = builder.getOrCreateCategory(Component.literal("Switching"));
+        ConfigCategory safety = builder.getOrCreateCategory(Component.literal("Protection & Restore"));
+        ConfigCategory advanced = builder.getOrCreateCategory(Component.literal("Advanced"));
         ConfigCategory slots = builder.getOrCreateCategory(Component.literal("Hotbar Slots"));
-        ConfigCategory optional = builder.getOrCreateCategory(Component.literal("Optional"));
-        ConfigCategory profiles = builder.getOrCreateCategory(Component.literal("Profiles"));
 
-        general.addEntry(entries.startTextDescription(
-            Component.literal("Veok's client-side hotbar helper. Core features are on; extra features stay off until you want them.").withStyle(ChatFormatting.GRAY)
+        quickStart.addEntry(entries.startTextDescription(
+            Component.literal("Start here. Mining and hostile-mob switching are ready by default; the other tabs let you fine-tune the behavior.").withStyle(ChatFormatting.GRAY)
         ).build());
 
         addToggle(
-            general,
+            quickStart,
             entries,
             "Enabled",
             "Master switch for the whole mod.",
@@ -41,32 +44,35 @@ public final class AutoToolSwitcherConfigScreen {
             value -> AutoToolSwitcherClient.enabled = value
         );
 
-        addMiningPreference(optional, entries);
+        quickStart.addEntry(entries.startTextDescription(
+            Component.literal("Profiles replace every setting when you save. Choose Custom to keep the settings selected below.").withStyle(ChatFormatting.GRAY)
+        ).build());
+        addProfileSelector(quickStart, entries, profileToApply);
 
         addToggle(
-            triggers,
+            switching,
             entries,
             "Switch while mining",
-            "When you hold attack on a block, use the best matching hotbar tool.",
+            "Select the best matching hotbar tool before a block-break action.",
             AutoToolSwitcherClient.switchForBlocksWhileMining,
             AutoToolSwitcherClient.DEFAULT_SWITCH_FOR_BLOCKS_WHILE_MINING,
             value -> AutoToolSwitcherClient.switchForBlocksWhileMining = value
         );
 
         addToggle(
-            triggers,
+            switching,
             entries,
-            "Switch on block look",
-            "Switch just from aiming at a block. Powerful, but easier to accidentally trigger.",
+            "Switch while looking at blocks",
+            "Select a tool just by aiming at a block. Leave this off for a calmer hotbar.",
             AutoToolSwitcherClient.switchForBlocksOnLook,
             AutoToolSwitcherClient.DEFAULT_SWITCH_FOR_BLOCKS_ON_LOOK,
             value -> AutoToolSwitcherClient.switchForBlocksOnLook = value
         );
 
         addToggle(
-            triggers,
+            switching,
             entries,
-            "Sword for hostile mobs",
+            "Melee for hostile mobs",
             "When your crosshair is on a hostile mob, pull out your best melee weapon.",
             AutoToolSwitcherClient.switchForHostileMobs,
             AutoToolSwitcherClient.DEFAULT_SWITCH_FOR_HOSTILE_MOBS,
@@ -74,7 +80,7 @@ public final class AutoToolSwitcherConfigScreen {
         );
 
         addToggle(
-            optional,
+            advanced,
             entries,
             "Right-click block tools",
             "Optional helper for axes, hoes, shovels, and shears while holding right-click on blocks.",
@@ -84,7 +90,7 @@ public final class AutoToolSwitcherConfigScreen {
         );
 
         addToggle(
-            optional,
+            advanced,
             entries,
             "Ranged combat",
             "Optional bow/crossbow switching for hostile mobs past the configured distance.",
@@ -94,7 +100,7 @@ public final class AutoToolSwitcherConfigScreen {
         );
 
         addSlider(
-            optional,
+            advanced,
             entries,
             "Ranged combat distance",
             "Minimum distance before the ranged combat option prefers bow/crossbow.",
@@ -107,27 +113,27 @@ public final class AutoToolSwitcherConfigScreen {
         );
 
         addToggle(
-            optional,
+            advanced,
             entries,
             "Allow combat axes",
-            "Let combat switching choose axes when they score higher than swords.",
+            "Let combat switching choose axes when they score higher than other melee weapons.",
             AutoToolSwitcherClient.allowAxesForCombat,
             AutoToolSwitcherClient.DEFAULT_ALLOW_AXES_FOR_COMBAT,
             value -> AutoToolSwitcherClient.allowAxesForCombat = value
         );
 
         addToggle(
-            optional,
+            advanced,
             entries,
             "Allow combat maces",
-            "Let combat switching choose maces when they score higher than swords.",
+            "Let combat switching choose maces when they score higher than other melee weapons.",
             AutoToolSwitcherClient.allowMacesForCombat,
             AutoToolSwitcherClient.DEFAULT_ALLOW_MACES_FOR_COMBAT,
             value -> AutoToolSwitcherClient.allowMacesForCombat = value
         );
 
         addToggle(
-            optional,
+            advanced,
             entries,
             "HUD indicator",
             "Show a small overlay when Auto Tool Switcher changes slots.",
@@ -154,7 +160,7 @@ public final class AutoToolSwitcherConfigScreen {
             AutoToolSwitcherClient.minDurabilityLeft,
             AutoToolSwitcherClient.DEFAULT_MIN_DURABILITY_LEFT,
             0,
-            64,
+            AutoToolSwitcherClient.MAX_MIN_DURABILITY_LEFT,
             value -> value + " durability",
             value -> AutoToolSwitcherClient.minDurabilityLeft = value
         );
@@ -192,6 +198,8 @@ public final class AutoToolSwitcherConfigScreen {
             value -> AutoToolSwitcherClient.pauseWhileDropKeyDown = value
         );
 
+        addMiningPreference(advanced, entries);
+
         slots.addEntry(entries.startTextDescription(
             Component.literal("Only these hotbar slots can be selected automatically. Restore can still return to any previous slot.").withStyle(ChatFormatting.GRAY)
         ).build());
@@ -208,11 +216,7 @@ public final class AutoToolSwitcherConfigScreen {
             );
         }
 
-        addProfileSelector(profiles, entries);
-        profiles.addEntry(entries.startTextDescription(
-            Component.literal("Profiles are shortcuts. Pick one, save, then reopen this screen to see the applied toggles.").withStyle(ChatFormatting.GRAY)
-        ).build());
-        profiles.addEntry(entries.startTextDescription(
+        advanced.addEntry(entries.startTextDescription(
             Component.literal("Keybinds are in Minecraft Controls under Auto Tool Switcher. They are unbound by default.").withStyle(ChatFormatting.GRAY)
         ).build());
 
@@ -232,16 +236,20 @@ public final class AutoToolSwitcherConfigScreen {
             .build());
     }
 
-    private static void addProfileSelector(ConfigCategory category, ConfigEntryBuilder entries) {
+    private static void addProfileSelector(
+        ConfigCategory category,
+        ConfigEntryBuilder entries,
+        AutoToolSwitcherClient.ProfilePreset[] profileToApply
+    ) {
         category.addEntry(entries.startEnumSelector(
-                Component.literal("Apply profile on save"),
+                Component.literal("Apply profile"),
                 AutoToolSwitcherClient.ProfilePreset.class,
                 AutoToolSwitcherClient.ProfilePreset.CUSTOM
             )
             .setDefaultValue(AutoToolSwitcherClient.ProfilePreset.CUSTOM)
             .setEnumNameProvider(value -> Component.literal(((AutoToolSwitcherClient.ProfilePreset) value).displayName()))
-            .setTooltip(Component.literal("Optional presets for quick setup. Custom means do nothing."))
-            .setSaveConsumer(value -> AutoToolSwitcherClient.applyProfile(value))
+            .setTooltip(Component.literal("Choose a preset to replace every setting on Save. Custom keeps your current choices."))
+            .setSaveConsumer(value -> profileToApply[0] = value)
             .build());
     }
 
